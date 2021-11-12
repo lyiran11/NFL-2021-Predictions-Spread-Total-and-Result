@@ -8,7 +8,7 @@ Total = Home Points + Away Points
 Result = 1 if Home Team Wins
          0 if Home Team Loses
 
-To build adequare predictive models, historical data is needed for training and testing. The dataset "game_results.csv" contains important information about every game in the NFL since 1966. The dataset "nfl_stadiums.csv" contains information on all NFL stadiums. The dataset "nfl_teams.csv" contains important information necessary for linking datasets according to team name and abbreviations. 
+To build adequate predictive models, we need to use historical data for training and testing. The dataset "game_results.csv" contains important information about every game in the NFL since 1966. The dataset "nfl_stadiums.csv" contains information on all NFL stadiums. The dataset "nfl_teams.csv" contains important information necessary for linking datasets according to team name and abbreviations. 
 
 Since the data we are given is elementary and basic, we also engineered a new variable and used outside data (more details can be found in the report pdf file), which helped us gain a competitive edge in the sports betting market.
 
