@@ -1,5 +1,17 @@
 # Project Details
-This is a predictive modeling project related to the world of sports betting in the NFL. The primary goal of this project is to design models for prediction of three variables – Spread, Total, and Result – often used in sports gambling. Our group made predictions of the three variables for all NFL games between November 8 and November 29, inclusively.
+
+The primary objective of this study was to predict the outcomes of NFL games for the 2021 season, with a particular focus on the spread, total, and overall result of each game. To accomplish this, a comprehensive approach to data sourcing and processing was employed.
+
+The foundation of our data-driven analysis was the play-by-play data sourced from the NFLfastR repository. This data was meticulously aggregated at the game level using the “GAMEID” variable, ensuring each game was represented in a single row. This format was crucial for the subsequent predictive modeling phase. During the transformation process, variables were renamed for clarity and ease of understanding. The resulting dataset, termed “total_games”, spanned games from the onset of the 2010 season to the present, encompassing both regular season and playoff matches.
+
+To enrich the analysis, additional data was incorporated. This included offensive and defensive season stats for teams dating back to the 2003 season, all sourced from Pro Football Reference. Recognizing gaps in this data, advanced statistics like interceptions, sacks, and conversion rates were web scraped and integrated into the dataset. This additional layer of detail proved invaluable for model validation. By juxtaposing the per-game stats of the current season against this rich historical backdrop, we ensured our models were both robust and accurate.
+
+An innovative aspect of our approach was the introduction of a new predictor named “conversion advantage”. This metric calculates the 3rd down conversion advantage or disadvantage that the home team has over the away team. The rationale behind this was the pivotal role 3rd down plays often have in a game, determining whether a drive continues or ends. Ultimately, this predictor captured the essence of these crucial moments, serving as a potent indicator of game outcomes.
+
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+**Special Terms**:
 
 Spread = Home Points − Away Points
 
@@ -7,10 +19,6 @@ Total = Home Points + Away Points
 
 Result = 1 if Home Team Wins
          0 if Home Team Loses
-
-To build adequate predictive models, we need to use historical data for training and testing. The dataset "game_results.csv" contains important information about every game in the NFL since 1966. The dataset "nfl_stadiums.csv" contains information on all NFL stadiums. The dataset "nfl_teams.csv" contains important information necessary for linking datasets according to team name and abbreviations. 
-
-Since the data we are given is elementary and basic, we also engineered a new variable and used outside data (more details can be found in the report pdf file), which helped us gain a competitive edge in the sports betting market.
 
 Glossary
 Rk -- Rank This is a count of the rows from top to bottom. It is recalculated following the sorting of a column.
