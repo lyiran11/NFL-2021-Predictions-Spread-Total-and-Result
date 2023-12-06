@@ -1,0 +1,487 @@
+---
+title: "P2"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+TG<- read.csv("TG.csv",check.names = FALSE)
+```
+```{r}
+library(caret)
+library(class)
+```
+
+```{r}
+#dataset with everything
+#TG_ALLVARS <- read.csv("total_games_noNaN1.csv",check.names = FALSE)
+#TG_ALLVARS <- na.omit(TG_ALLVARS)
+```
+
+Ignore chunk below:
+```{r}
+spread_all <- lm(Spread~., data = subset(TG_ALLVARS, select = -c(Total, WINLOSS, WEEK, AWAYCITY, HOMECITY,Year, )))
+#summary(spread_all)
+summary(stepAIC(spread_all, direction = "backward", trace = FALSE))
+```
+
+Setting Seed and Dividing Dataset into Test and Train
+```{r}
+set.seed(406)
+smp_size <- floor(0.75 * nrow(TG))
+train_index <- sample(seq_len(nrow(TG)), size = smp_size)
+games_train <- TG[train_index, ]
+games_test <- TG[-train_index, ]
+```
+
+spread_knn
+```{r}
+set.seed(1)
+
+tuneGrid <- expand.grid(
+  k = seq(3, 20, by = 2)
+)
+
+ctrl <- trainControl(
+  method = "cv",
+  number = 10,
+)
+
+model_spread_knn <- train(
+  Spread ~ .,
+  data = games_train[,-c(44,45)],
+  method = 'knn',
+  preProcess = c("center", "scale"),
+  trControl = ctrl,
+  tuneGrid = tuneGrid
+)
+model_spread_knn
+plot(model_spread_knn)
+
+pred_spread = predict(model_spread_knn, newdata = games_test[,-c(43,44,45)])
+
+# RMSE
+sqrt(mean((games_test$Spread - pred_spread)^2))
+#MAE
+mean(abs(games_test$Spread - pred_spread))
+# R2
+cor(games_test$Spread, pred_spread) ^ 2
+```
+Logistic regression for W/L
+```{r}
+# Logistic regression model for W/L
+result_train = games_train[,-c(43,44)]
+result_test = games_test[,-c(43,44)]
+result_logit_reg <- glm(WINLOSS ~ ., data = result_train, family = binomial)
+
+#Prediction on testing data
+result_logit_reg_prob <- predict(result_logit_reg, result_test, type = "response")
+result_logit_reg_pred <- ifelse(result_logit_reg_prob >= 0.5, 1, 0)
+
+#Error rate in Logistic regression for W/L
+result_logit_reg_R <- 100 * sum(result_logit_reg_pred != result_test$WINLOSS)/length(result_test$WINLOSS)
+result_logit_reg_R
+```
+```{r}
+expected = result_test$WINLOSS
+confusionMatrix(as.integer(result_logit_reg_pred),expected)
+```
+
+```{r}
+result_logit_reg2 <- glm(WINLOSS ~ `FGA_H` + `EPA_H` + `FGA_A` + `EPA_A`+ `FG_PCT_H`+ `FG_PCT_A`+`2PCA_H`+`2PCA_A`, data = result_train, family = binomial)
+
+result_logit_reg_prob2 <- predict(result_logit_reg2, result_test, type = "response")
+result_logit_reg_pred2 <- ifelse(result_logit_reg_prob2 >= 0.5, 1, 0)
+
+#Error rate in Logistic regression for W/L
+result_logit_reg_R2 <- 100 * sum(result_logit_reg_pred != result_test$WINLOSS)/length(result_test$WINLOSS)
+result_logit_reg_R2
+
+summary(result_logit_reg2)
+```
+
+
+```{r}
+#rf_model = randomForest(x=x_result_train, y=y_result_train,  xtest = x_result_test, ytest = y_result_test, proximity = TRUE)
+library(tree)
+#result_train$`2PCA_H`
+
+```
+
+
+Ridge Regression for W/L
+```{r}
+set.seed(2020)
+x_result_train = as.matrix(subset(result_train, select=-WINLOSS))
+y_result_train = result_train$WINLOSS
+
+x_result_test = as.matrix(subset(result_test, select=-WINLOSS))
+y_result_test = result_test$WINLOSS
+
+lambdas <- 10^seq(2, -3, by = -.1)
+result_ridge_reg = glmnet(x_result_train, y_result_train, nlambda = 25, alpha = 0, family = 'gaussian', lambda = lambdas)
+result_ridge_cv <- cv.glmnet(x_result_train, y_result_train, alpha = 0, lambda = lambdas)
+
+# Best lambda value for result
+result_best_lambda_ridge <- result_ridge_cv$lambda.min
+result_best_lambda_ridge
+
+# Best ridge regression model for result
+result_best_ridge <- glmnet(x_result_train, y_result_train, alpha = 0, lambda = result_best_lambda_ridge)
+#coef(result_best_ridge)
+
+# Predict on testing data
+result_ridge_reg_prob <- predict(result_best_ridge, s = result_best_lambda_ridge, newx = x_result_test, type = "class")
+result_ridge_reg_pred <- ifelse(result_ridge_reg_prob >= 0.5, 1, 0)
+
+#Error rate in Ridge regression for W/L
+result_ridge_reg_R <- 100 * sum(result_ridge_reg_pred != result_test$WINLOSS)/length(result_test$WINLOSS)
+result_ridge_reg_R
+```
+
+
+Lasso Regression for Result
+```{r}
+x_result_train = result_train[,-c(43)]
+y_result_train = result_train[,43]
+x_result_test = result_test[,-c(43)]
+y_result_test = result_test[,43]
+  
+#lasso.heart = glmnet(as.matrix(scale_heart.lasso[train,-12]), Y[train], alpha=1)
+
+#library(glmnet)
+#lambdas <- 10^seq(2, -3, by = -.1)
+
+set.seed(2021)
+result_lasso_reg <- glmnet(x_result_train, y_result_train, alpha = 1, standardize = TRUE, nfolds = 10)
+
+result_lasso_regcv <- cv.glmnet(as.matrix(x_result_train), y_result_train, alpha = 1, standardize = TRUE)
+
+# Best lambda value for result
+result_best_lambda_lasso <- result_lasso_regcv$lambda.min
+result_best_lambda_lasso
+
+# Best Lasso regression model for result
+#result_best_lasso <- glmnet(as.matrix(x_result_train), y_result_train, alpha = 1, lambda = result_best_lambda_lasso, standardize = TRUE)
+#coef(result_best_lasso)
+
+#Prediction on testing data
+result_lasso_reg_prob <- predict(result_lasso_reg, s = result_best_lambda_lasso, newx = as.matrix(x_result_test))
+result_lasso_reg_pred <- ifelse(result_lasso_reg_prob >= 0.5, 1, 0)
+
+#Error rate in Lasso regression for W/L
+result_lasso_reg_R <- 100 * sum(result_lasso_reg_pred != result_test$WINLOSS)/length(result_test$WINLOSS)
+result_lasso_reg_R
+```
+
+
+spread knn without elo
+```{r}
+#spread_knn without elo
+model6 <- train(
+  Spread ~ .,
+  data = games_train[,-c(41,42,44,45)],
+  method = 'knn',
+  preProcess = c("center", "scale"),
+  trControl = ctrl,
+  tuneGrid = tuneGrid
+)
+model6
+
+pred_spread2 = predict(model6, newdata = games_test[,-c(41,42,43,44,45)])
+
+# RMSE
+sqrt(mean((games_test$Spread - pred_spread2)^2))
+# R2
+cor(games_test$Spread, pred_spread2) ^ 2
+```
+
+total_knn
+```{r}
+model_total_knn <- train(
+  Total ~ .,
+  data = games_train[,-c(43,45)],
+  method = 'knn',
+  preProcess = c("center", "scale"),
+  trControl = ctrl,
+  tuneGrid = tuneGrid
+)
+model_total_knn
+plot(model_total_knn)
+
+pred_total = predict(model_total_knn, newdata = games_test[,-c(43,44,45)])
+
+# RMSE
+sqrt(mean((games_test$Total - pred_total)^2))
+#MAE
+mean(abs(games_test$Total - pred_total))
+# R2
+cor(games_test$Total, pred_total) ^ 2
+```
+
+W/L KNN
+```{r}
+#install.packages("class")
+#library(class)
+
+# scale the dataset (for predictors only):
+wl_x_knn = as.data.frame(scale(TG[,-c(43,44,45)], center=T,scale=T))
+wl_y_knn = TG[,-c(43,44)]$WINLOSS
+
+#combine x and y
+#spread_knn = cbind(spread_x_knn,spread_y_knn)
+
+set.seed (1)
+iter <- 20  #iteration of K
+
+
+n = nrow(wl_x_knn)
+times =rep(1:6,c(1/6*n,1/6*n,1/6*n,1/6*n,1/6*n,1/6*n))
+ntimes = length(times)
+sets = sample(times)
+all_knn_cv = cbind()
+
+set.seed (1)
+
+# Compute accuracy on test set.
+all_knn_cv_test = cbind()
+for (i in 1:6) {
+  cv_test = wl_x_knn[sets==i,]
+  cv_train = wl_x_knn[sets!=i,]
+  Y_train = wl_y_knn[sets!=i]
+  Y_test = wl_y_knn[sets==i]
+  
+  
+  
+
+  # Compute testing set accuracy.
+ errs <- vapply(seq_len(iter), function(x){
+    k <- knn(cv_train, cv_test, Y_train, k = x)
+   sum(k != Y_test) / length(k)
+  }, numeric(1))
+
+  all_knn_cv_test = cbind(all_knn_cv_test,errs)  
+}
+
+mean_err_test = c()
+for (i in 1:20){
+  mean_err_test = c(mean_err_test, mean(all_knn_cv_test[i,]))
+}
+
+df_test <- data.frame(k = seq_len(iter), accuracy = 1-mean_err_test)
+
+#plot the accuracy:
+#library(ggplot2)
+#library(tidyverse)
+ggplot() + 
+  geom_line(data = df_test, stat = "identity", aes(x=k,y=accuracy,color="testing"))+
+  scale_colour_manual("", 
+                      breaks = c("testing"),
+                      values = c("blue"))+
+  ggtitle("Accuracy of Testing Set using KNN value of k=1 to 20") + 
+  xlim(1, iter)
+```
+
+
+```{r}
+predictor_set <- read.csv("predictor_set.csv",check.names = FALSE)
+```
+
+```{r}
+library(FNN)
+```
+
+Total Games Dataset For Spread, Total, Result
+```{r}
+TG_spread <- subset(TG, select = -c(Total, WINLOSS)) #Total Games without Total and WINLOSS variables for Spread
+TG_total <- subset(TG, select = -c(Spread, WINLOSS)) #Total Games without Total and WINLOSS variables for Total
+TG_result <- subset(TG, select = -c(Spread, Total)) #Total Games without Total and WINLOSS variables for Result
+```
+
+Creating train and test datasets based on what we are trying to predict
+```{r}
+spread_train<- subset(games_train, select = -c(Total, WINLOSS))
+spread_test<- subset(games_test, select = -c(Total, WINLOSS))
+total_train<- subset(games_train, select = -c(Spread, WINLOSS))
+total_test<- subset(games_test, select = -c(Spread, WINLOSS))
+result_train<- subset(games_train, select = -c(Spread, Total))
+result_test<- subset(games_test, select = -c(Spread, Total))
+```
+
+Baseline Linear Regression for Spread - Rsquared = 0.9195 
+```{r}
+#spread liner reg baseline
+spread_lm_basel <- lm(Spread ~ .  , data = TG_spread)
+summary(spread_lm_basel) #R2 = 0.9195 
+```
+
+Baseline Linear Regression for Spread Prediction - RSME = 3.791118
+```{r}
+spread_lm_basel_train <- lm(Spread ~ .  , data = spread_train)
+summary(spread_lm_basel_train) #R2 = 0.9193 
+predict_spread_lm_basel <- predict.lm(spread_lm_basel_train, newdata = spread_test)
+rmse_spread_lm_basel <- RMSE(predict_spread_lm_basel, spread_test$Spread)
+rmse_spread_lm_basel #RSME = 3.791118
+```
+
+Manual Backwise Prediction - w/ mostly significant value - R2 = 0.9197
+```{r}
+summary(lm(formula = Spread ~ FGA_H + EPA_H + `2PCA_H` + Rush_Yards_H + 
+    Pass_Yards_H +  Rush_YpA_H + Pass_YpA_H  + 
+     `4th_PCT_H`  + 
+    FG_PCT_H   + 
+    FGA_A + EPA_A + `2PCA_A` + 
+    RA_A + PA_A + Rush_YpA_A + Pass_YpA_A  + 
+    `3rd_PCT_A` + FG_PCT_A + 
+    PEN_YDS_A  + elo_H + 
+     Third_Down_Ratio, data = TG_spread))
+```
+
+Manual Backwise Prediction - w/ all significant values - R2 = 0.9196 
+```{r}
+summary(lm(formula = Spread ~ FGA_H + EPA_H + `2PCA_H` + Rush_Yards_H + 
+    Pass_Yards_H +  Rush_YpA_H + 
+    FG_PCT_H   + 
+    FGA_A + EPA_A + `2PCA_A` + 
+    RA_A + PA_A + Rush_YpA_A + Pass_YpA_A  + 
+    `3rd_PCT_A` + FG_PCT_A + 
+    PEN_YDS_A  + elo_H + 
+     Third_Down_Ratio, data = TG_spread))
+```
+
+
+```{r}
+library(MASS)
+```
+
+```{r}
+spread_lm_for<- stepAIC(spread_lm_basel, direction = "forward", trace = FALSE)
+summary(spread_lm_for)
+```
+```{r}
+spread_lm_bi<- stepAIC(spread_lm_basel, direction = "both", trace = FALSE)
+summary(spread_lm_bi)
+```
+
+
+```{r}
+spread_lm_back<- stepAIC(spread_lm_basel, direction = "backward", trace = FALSE)
+summary(spread_lm_back)
+```
+
+
+```{r}
+spread_lm_for1<- step(spread_lm_basel, direction = "forward", trace = FALSE)
+summary(spread_lm_for1)
+```
+```{r}
+spread_lm_back1<- step(spread_lm_basel, direction = "backward", trace = FALSE)
+summary(spread_lm_back1)
+```
+
+```{r}
+spread_lm_bi1<- step(spread_lm_basel, direction = "both", trace = FALSE)
+summary(spread_lm_bi1)
+```
+
+KNN Regression for Spread
+```{r}
+#knnreg_spread_k1<-knn.reg(train = spread_train, test = spread_test, y=spread_train$Spread, k=5)
+#knnreg_spread_k1
+
+# scale the dataset (for predictors only):
+spread_x_knn = as.data.frame(scale(TG_spread[,-43], center=T,scale=T))
+spread_y_knn = TG_spread$Spread
+
+#combine x and y
+#spread_knn = cbind(spread_x_knn,spread_y_knn)
+
+set.seed (1)
+iter <- 20  #iteration of K
+
+
+n = nrow(spread_x_knn)
+times =rep(1:6,c(1/6*n,1/6*n,1/6*n,1/6*n,1/6*n,1/6*n))
+ntimes = length(times)
+sets = sample(times)
+all_knn_cv = cbind()
+
+for (i in 1:6) {
+  cv_test = spread_x_knn[sets==i,]
+  cv_train = spread_x_knn[sets!=i,]
+  Y_train = spread_y_knn[sets!=i]
+  Y_test = spread_y_knn[sets==i]
+
+  # Compute training set accuracy.
+ errs = vapply(seq_len(iter), function(x){
+   k = knn.reg(train = cv_train, test = cv_test, y=Y_train, k=x)
+   sqrt(mean((k$pred - Y_train)^2))
+  }, numeric(1))
+
+  all_knn_cv = cbind(all_knn_cv,errs)  
+}
+
+mean_err = c()
+for (i in 1:20){
+  mean_err = c(mean_err, mean(all_knn_cv[i,]))
+}
+
+df <- data.frame(k = seq_len(iter), accuracy = mean_err)
+
+set.seed (1)
+# Compute accuracy on test set.
+
+all_knn_cv_test = cbind()
+for (i in 1:6) {
+  cv_test = spread_x_knn[sets==i,]
+  cv_train = spread_x_knn[sets!=i,]
+  Y_train = spread_y_knn[sets!=i]
+  Y_test = spread_y_knn[sets==i]
+
+  # Compute training set accuracy.
+ errs <- vapply(seq_len(iter), function(x){
+    k <- knn(cv_train, cv_test, Y_train, k = x)
+   sum(k != Y_test) / length(k)
+  }, numeric(1))
+
+  all_knn_cv_test = cbind(all_knn_cv_test,errs)  
+}
+
+mean_err_test = c()
+for (i in 1:20){
+  mean_err_test = c(mean_err_test, mean(all_knn_cv_test[i,]))
+}
+
+df_test <- data.frame(k = seq_len(iter), accuracy = 1-mean_err_test)
+```
+
+```{r}
+RMSE(spread_test$Spread, knnreg_spread_k1$pred)
+```
+
+
+
+Baseline Linear Regression for Total
+```{r}
+summary(lm(Total ~ .  , data = TG_total))
+```
+
+```{r}
+for_predictions = read_csv("for_predictions.csv")
+```
+
+```{r}
+TG_result <- subset(TG, select = -c(Spread, Total))
+result_logit_pred <- glm(WINLOSS ~ ., data = TG_result, family = binomial)
+
+#Prediction 
+result_logit_reg_prob_pred <- predict(result_logit_pred, for_predictions, type = "response")
+predicted_result <- ifelse(result_logit_reg_prob_pred >= 0.5, 1, 0)
+pred_result = as.data.frame(predicted_result)
+head(pred_result)
+pred_result
+```
+
